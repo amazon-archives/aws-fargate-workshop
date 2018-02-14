@@ -1,0 +1,22 @@
+{
+    "cluster": "workshop",
+    "serviceName": "workshop",
+    "taskDefinition": "workshop:1",
+    "desiredCount": 1,
+    "launchType": "FARGATE",
+    "platformVersion": "LATEST",
+    "loadBalancers": [
+        {
+            "targetGroupArn": "YOUR_TARGET_GROUP_ARN_HERE",
+            "containerName": "workshop",
+            "containerPort": 80
+        }
+    ],
+    "networkConfiguration": {
+        "awsvpcConfiguration": {
+            "subnets": ["YOUR_SUBNET1_ID_HERE", "YOUR_SUBNET2_ID_HERE"],
+            "securityGroups": ["YOUR_SECURITY_GROUP_ID_HERE"],
+            "assignPublicIp": "ENABLED"
+        }
+    }
+}

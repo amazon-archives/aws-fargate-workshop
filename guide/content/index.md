@@ -79,6 +79,6 @@ configure your AWS Cloud9 IDE and setup pre-requisites like an AWS Account.
 [build-push-image]: build-and-push-a-docker-image.html
 [create-a-service]: create-a-service.html
 [build-a-continuous-deployment-pipeline]: build-a-continuous-deployment-pipeline.html
-[repo]: https://github.com/jpignata/fargate-workshop-guide
-[issue]: https://github.com/jpignata/fargate-workshop-guide/issues
-[pull]: https://github.com/jpignata/fargate-workshop-guide/pulls
+[repo]: https://github.com/aws-samples/aws-fargate-workshop
+[issue]: https://github.com/aws-samples/aws-fargate-workshop/issues
+[pull]: https://github.com/aws-samples/aws-fargate-workshop/pulls

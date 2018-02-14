@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<head>
+<title>Lab Guide :: Running Containers on AWS Fargate</title>
+<meta charset='utf-8'>
+<meta content='width=device-width, initial-scale=1, shrink-to-fit=no' name='viewport'>
+<link href='https://a0.awsstatic.com/main/images/site/fav/favicon.ico' rel='icon' type='image/ico'>
+<link crossorigin='anonymous' href='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/css/bootstrap.min.css' integrity='sha384-/Y6pD6FV/Vv2HJnA6t+vslU6fwYXjCFtcEpHbNJ0lyAFsXTsjBbfaDjzALeQsN6M' rel='stylesheet'>
+<link href='css/styles.css' rel='stylesheet'>
+<link href='css/syntax.css' rel='stylesheet'>
+</head>
+<body>
+<div class='container'>
+<nav class='navbar navbar-dark bg-dark'>
+<a class='navbar-brand' href='/'>
+<img src='images/aws.png'>
+</a>
+</nav>
+<div class='row'>
+<div class='col-12 col-xl-9 col-lg-9' id='guide'>
+<h1>Running Containers on AWS Fargate</h1>
+<h2 id="create-a-service">Create a Service</h2>
+<p>In this module, you will create a new task definition and service to run the sample application we built in the previous module. To support this service, you’ll need to create an AWS Identity and Access Management (IAM) role to allow our application to read from and write to the Amazon DynamoDB table it uses to store data. We’ll also need to create an Application Load Balancer to distribute traffic across the running tasks that are being ran by the service.</p>
+<h3 id="implementation">Implementation</h3>
+<h4 id="create-the-task-role">1. Create the Task Role</h4>
+<p>Task roles are IAM roles that can be used by the containers in the task. For our application, we need to grant permission to read from and write to the Amazon DynamoDB table we created in the last module.</p>
+<p><strong>✅  Step-by-step Instruction</strong></p>
+<ol type="1">
+<li><p>Go to the AWS Management Console, click <strong>Services</strong> then select <strong>IAM</strong> under Security, Identity &amp; Compliance.</p></li>
+<li><p>Click on <strong>Roles</strong> in the left-hand navigation.</p></li>
+<li><p>Click <strong>Create role</strong>.</p></li>
+<li><p>First, we’ll configure which AWS service can assume this role. Click <strong>Elastic Container Service</strong> from the <strong>Choose the service that will use this role</strong> list.</p></li>
+<li><p>Next, choose <strong>Elastic Container Service Task</strong> from <strong>Select your use case</strong>.</p></li>
+<li><p>Click <strong>Next: Permissions</strong>.</p></li>
+<li><p>Click <strong>Create policy</strong>. The visual policy editor will open in a new tab.</p></li>
+<li><p>Click on <strong>Choose a service</strong> and click <strong>DynamoDB</strong>.</p></li>
+<li><p>Click on <strong>Actions</strong>.</p></li>
+<li><p>Expand the <strong>Read</strong> permissions and check the <strong>Scan</strong> and <strong>GetItem</strong> checkboxes.</p></li>
+<li><p>Expand the <strong>Write</strong> permissions and check the <strong>PutItem</strong> and <strong>DeleteItem</strong> checkboxes.</p></li>
+<li><p>Click <strong>Resources</strong> to limit the role to the <strong>quotes</strong> table.</p></li>
+<li><p>Click <strong>Add ARN</strong> next to <strong>table</strong>.</p></li>
+<li><p>Enter <code>us-east-1</code> in <strong>Region</strong>, your <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/console_account-alias.html">Account ID</a> in <strong>Account</strong>, and <code>quotes</code> in <strong>Table name</strong>.</p>
+<p><img src="images/create-a-service/add-arn.png" /></p></li>
+<li><p>Click <strong>Add</strong>.</p>
+<p><img src="images/create-a-service/visual-editor.png" /></p>
+<p>This will result in a policy allowing <strong>dynamodb:PutItem</strong>, <strong>dynamodb:Scan</strong>, <strong>dynamodb:DeleteItem</strong>, and <strong>dyanmodb:GetItem</strong>.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode json"><code class="sourceCode json"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="fu">{</span></a>
+<a class="sourceLine" id="cb1-2" data-line-number="2">    <span class="dt">&quot;Version&quot;</span><span class="fu">:</span> <span class="st">&quot;2012-10-17&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb1-3" data-line-number="3">    <span class="dt">&quot;Statement&quot;</span><span class="fu">:</span> <span class="ot">[</span></a>
+<a class="sourceLine" id="cb1-4" data-line-number="4">        <span class="fu">{</span></a>
+<a class="sourceLine" id="cb1-5" data-line-number="5">            <span class="dt">&quot;Effect&quot;</span><span class="fu">:</span> <span class="st">&quot;Allow&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb1-6" data-line-number="6">            <span class="dt">&quot;Action&quot;</span><span class="fu">:</span> <span class="ot">[</span></a>
+<a class="sourceLine" id="cb1-7" data-line-number="7">                <span class="st">&quot;dynamodb:PutItem&quot;</span><span class="ot">,</span></a>
+<a class="sourceLine" id="cb1-8" data-line-number="8">                <span class="st">&quot;dynamodb:GetItem&quot;</span><span class="ot">,</span></a>
+<a class="sourceLine" id="cb1-9" data-line-number="9">                <span class="st">&quot;dynamodb:Deletetem&quot;</span><span class="ot">,</span></a>
+<a class="sourceLine" id="cb1-10" data-line-number="10">                <span class="st">&quot;dynamodb:Scan&quot;</span></a>
+<a class="sourceLine" id="cb1-11" data-line-number="11">            <span class="ot">]</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb1-12" data-line-number="12">            <span class="dt">&quot;Resource&quot;</span><span class="fu">:</span> <span class="st">&quot;arn:aws:dynamodb:us-east-1:123456789012:table/quotes&quot;</span></a>
+<a class="sourceLine" id="cb1-13" data-line-number="13">        <span class="fu">}</span></a>
+<a class="sourceLine" id="cb1-14" data-line-number="14">    <span class="ot">]</span></a>
+<a class="sourceLine" id="cb1-15" data-line-number="15"><span class="fu">}</span></a></code></pre></div></li>
+<li><p>Click <strong>Review policy</strong>.</p></li>
+<li><p>Enter <code>WorkshopAppPolicy</code> in <strong>Name</strong>.</p>
+<p><img src="images/create-a-service/review-policy.png" /></p></li>
+<li><p>Click <strong>Create policy</strong>.</p>
+<p><img src="images/create-a-service/policy-confirmation.png" /></p></li>
+<li><p>Return to the original tab where you were creating the role. Click <strong>Refresh</strong> and type <code>WorkshopAppPolicy</code> in the <strong>Filter</strong> textbox. Check the <strong>WorkshopAppPolicy</strong> checkbox. Click <strong>Next: Review</strong>.</p></li>
+<li><p>Enter <code>WorkshopAppRole</code> in <strong>Role name</strong>.</p>
+<p><img src="images/create-a-service/review-role.png" /></p></li>
+<li><p>Click <strong>Create role</strong>.</p></li>
+</ol>
+<h4 id="create-the-task-definition">2. Create the Task Definition</h4>
+<p>Task definitions are blueprints for your application. They include details about what containers to run, their resource requirements, environment settings, networking configuration, and task role permission settings. In this step, we’ll create a task definition for our application. Complete either the directions using the AWS Management Console or the AWS Command Line Interface.</p>
+<p><strong>✅  Step-by-step Instructions (AWS Management Console)</strong></p>
+<ol type="1">
+<li><p>Go to the AWS Management Console, click <strong>Services</strong> then select <strong>Elastic Container Service</strong> under Compute.</p></li>
+<li><p>Click <strong>Task Definitions</strong> in the left-hand navigation.</p></li>
+<li><p>Click <strong>Create new Task Definition</strong>.</p></li>
+<li><p>Click <strong>Fargate</strong> to select the Fargate launch type.</p>
+<p><img src="images/create-a-service/launch-type.png" /></p></li>
+<li><p>Click <strong>Next step</strong>.</p></li>
+<li><p>Enter <code>workshop</code> into <strong>Task Definition Name</strong>.</p></li>
+<li><p>Select <strong>WorkshopAppRole</strong> from <strong>Task Role</strong>.</p></li>
+<li><p>Select <strong>0.5GB</strong> from <strong>Task memory (GB)</strong>.</p></li>
+<li><p>Select <strong>0.25 vCPU</strong> from <strong>Task CPU (vCPU)</strong>.</p></li>
+<li><p>Click <strong>Add container</strong>.</p></li>
+<li><p>Enter <code>workshop</code> into <strong>Container name</strong>.</p></li>
+<li><p>In <strong>Image</strong>, paste the repository URI for the Docker image you built and pushed in the previous module. For example, if your Account ID was 123456789012, then you’d enter: <code>123456789012.dkr.ecr.us-east-1.amazonaws.com/workshop</code></p></li>
+<li><p>Enter <code>80</code> into <strong>Container port</strong> and select <strong>tcp</strong> from <strong>Protocol</strong> in <strong>Port mappings</strong>.</p></li>
+<li><p>Click <strong>Add</strong>.</p></li>
+<li><p>Click <strong>Create</strong>.</p></li>
+</ol>
+<p><strong>✅  Step-by-step Instructions (AWS CLI)</strong></p>
+<ol type="1">
+<li><p>Switch to the tab where you have your Cloud9 environment opened.</p></li>
+<li><p>Open the file <code>fargate-workshop-app/ecs/task_definition.json</code> by navigating to it in the environment tree and double clicking the filename.</p></li>
+<li><p>The file has the following contents:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode json"><code class="sourceCode json"><a class="sourceLine" id="cb2-1" data-line-number="1"><span class="fu">{</span></a>
+<a class="sourceLine" id="cb2-2" data-line-number="2">  <span class="dt">&quot;family&quot;</span><span class="fu">:</span> <span class="st">&quot;workshop&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-3" data-line-number="3">  <span class="dt">&quot;requiresCompatibilities&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;FARGATE&quot;</span><span class="ot">]</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-4" data-line-number="4">  <span class="dt">&quot;cpu&quot;</span><span class="fu">:</span> <span class="st">&quot;256&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-5" data-line-number="5">  <span class="dt">&quot;memory&quot;</span><span class="fu">:</span> <span class="st">&quot;512&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-6" data-line-number="6">  <span class="dt">&quot;networkMode&quot;</span><span class="fu">:</span> <span class="st">&quot;awsvpc&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-7" data-line-number="7">  <span class="dt">&quot;taskRoleArn&quot;</span><span class="fu">:</span> <span class="st">&quot;arn:aws:iam::YOUR_ACCOUNT_ID_HERE:role/WorkshopAppRole&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-8" data-line-number="8">  <span class="dt">&quot;executionRoleArn&quot;</span><span class="fu">:</span> <span class="st">&quot;arn:aws:iam::YOUR_ACCOUNT_ID_HERE:role/ecsTaskExecutionRole&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-9" data-line-number="9">  <span class="dt">&quot;containerDefinitions&quot;</span><span class="fu">:</span> <span class="ot">[</span></a>
+<a class="sourceLine" id="cb2-10" data-line-number="10">    <span class="fu">{</span></a>
+<a class="sourceLine" id="cb2-11" data-line-number="11">      <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;workshop&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-12" data-line-number="12">      <span class="dt">&quot;image&quot;</span><span class="fu">:</span> <span class="st">&quot;YOUR_ACCOUNT_ID_HERE.dkr.ecr.us-east-1.amazonaws.com/workshop&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-13" data-line-number="13">      <span class="dt">&quot;essential&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-14" data-line-number="14">      <span class="dt">&quot;logConfiguration&quot;</span><span class="fu">:</span> <span class="fu">{</span></a>
+<a class="sourceLine" id="cb2-15" data-line-number="15">        <span class="dt">&quot;logDriver&quot;</span><span class="fu">:</span> <span class="st">&quot;awslogs&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-16" data-line-number="16">        <span class="dt">&quot;options&quot;</span><span class="fu">:</span> <span class="fu">{</span></a>
+<a class="sourceLine" id="cb2-17" data-line-number="17">          <span class="dt">&quot;awslogs-group&quot;</span><span class="fu">:</span> <span class="st">&quot;/ecs/workshop&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-18" data-line-number="18">          <span class="dt">&quot;awslogs-region&quot;</span><span class="fu">:</span> <span class="st">&quot;us-east-1&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-19" data-line-number="19">          <span class="dt">&quot;awslogs-stream-prefix&quot;</span><span class="fu">:</span> <span class="st">&quot;ecs&quot;</span></a>
+<a class="sourceLine" id="cb2-20" data-line-number="20">        <span class="fu">}</span></a>
+<a class="sourceLine" id="cb2-21" data-line-number="21">      <span class="fu">},</span></a>
+<a class="sourceLine" id="cb2-22" data-line-number="22">      <span class="dt">&quot;portMappings&quot;</span><span class="fu">:</span> <span class="ot">[</span></a>
+<a class="sourceLine" id="cb2-23" data-line-number="23">        <span class="fu">{</span></a>
+<a class="sourceLine" id="cb2-24" data-line-number="24">          <span class="dt">&quot;protocol&quot;</span><span class="fu">:</span> <span class="st">&quot;tcp&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb2-25" data-line-number="25">          <span class="dt">&quot;containerPort&quot;</span><span class="fu">:</span> <span class="dv">80</span></a>
+<a class="sourceLine" id="cb2-26" data-line-number="26">        <span class="fu">}</span></a>
+<a class="sourceLine" id="cb2-27" data-line-number="27">      <span class="ot">]</span></a>
+<a class="sourceLine" id="cb2-28" data-line-number="28">    <span class="fu">}</span></a>
+<a class="sourceLine" id="cb2-29" data-line-number="29">  <span class="ot">]</span></a>
+<a class="sourceLine" id="cb2-30" data-line-number="30"><span class="fu">}</span></a></code></pre></div></li>
+<li><p>Replace the <strong>YOUR_ACCOUNT_ID_HERE</strong> placeholders with your <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/console_account-alias.html">Account ID</a>. Save the file by going to <strong>File</strong> and selecting <strong>Save</strong> in the menu bar, or pressing <strong>⌘-S</strong> (macOS) or <strong>Ctrl-S</strong> (Windows / Linux).</p></li>
+<li><p>Create a new task definition from the JSON file by running this command in your Cloud9 terminal:</p>
+<pre class="console"><code>aws ecs register-task-definition --cli-input-json file://~/environment/fargate-workshop-app/ecs/task_definition.json</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+<li><p>Create the CloudWatch Logs log group <code>/ecs/workshop</code> configured in your new task definition by running this command in your Cloud9 terminal:</p>
+<pre class="console"><code>aws logs create-log-group --log-group-name /ecs/workshop</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+</ol>
+<h4 id="create-an-application-load-balancer">3. Create an Application Load Balancer</h4>
+<p><strong>✅  Step-by-step Instructions</strong></p>
+<ol type="1">
+<li><p>Go to the AWS Management Console, click <strong>Services</strong> then select <strong>EC2</strong> under Compute.</p></li>
+<li><p>Click on <strong>Load Balancers</strong> in the left-hand navigation.</p></li>
+<li><p>Click <strong>Create Load Balancer</strong>.</p></li>
+<li><p>In <strong>Application Load Balancer</strong>, click <strong>Create</strong>.</p>
+<p><img src="images/create-a-service/application-load-balancer.png" /></p></li>
+<li><p>Enter <code>workshop</code> into <strong>Name</strong>.</p></li>
+<li><p>Select the <strong>VPC</strong> created in the first module when you created the ECS cluster in the first module. If you need to find the VPC ID do one of the following:</p>
+<p><strong>AWS Management Console</strong></p>
+<ol type="1">
+<li><p>Click on <strong>Services</strong>, right-click on <strong>VPC</strong> under Networking &amp; Content Delivery and click <strong>Open Link in New Tab</strong>.</p></li>
+<li><p>Click on <strong>Your VPCs</strong> in the left-hand navigation.</p></li>
+<li><p>Click on each VPC, and click on its <strong>Tags</strong> tab. The VPC you’re looking for has a tag with <strong>Key</strong> <code>aws:cloudformation:stack-name</code> and <strong>Value</strong> <code>EC2ContainerService-workshop</code></p></li>
+</ol>
+<p><strong>AWS CLI</strong></p>
+<ol type="1">
+<li><p>Run the following command in your Cloud9 terminal:</p>
+<pre class="console"><code>aws ec2 describe-vpcs --query Vpcs[0].VpcId --output text \
+  --filters Name=tag:aws:cloudformation:stack-name,Values=EC2ContainerService-workshop</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+</ol></li>
+<li><p>Select all <strong>Availability Zones</strong> configured for the VPC by checking each checkbox.</p></li>
+<li><p>Click <strong>Next: Configure Security Settings</strong>.</p></li>
+<li><p>The wizard will warn you that you’ve not established a secure listener as we didn’t define an HTTPS listener. Click <strong>Next: Configure Security Groups</strong>.</p></li>
+<li><p>Tick the <strong>Create a new security group</strong> radio button. This will create a new security group which will permit traffic to port 80 by default.</p></li>
+<li><p>Click <strong>Next: Configure Routing</strong>.</p></li>
+<li><p>Enter <code>workshop</code> into <strong>Name</strong>.</p></li>
+<li><p>Enter <code>80</code> into <strong>Port</strong>.</p></li>
+<li><p>Select <strong>ip</strong> from <strong>Target type</strong>.</p></li>
+<li><p>Click <strong>Next: Register Targets</strong>. We won’t register anything as we’ll rely on Amazon ECS to manage our Target Group for us.</p></li>
+<li><p>Click <strong>Next: Review</strong>. Review the details you configured, then click <strong>Create</strong>.</p></li>
+<li><p>Click on the <strong>workshop</strong> link to view details about the new load balancer.</p>
+<p><img src="images/create-a-service/load-balancer-confirmation.png" /></p></li>
+<li><p>Click on the <strong>workshop</strong> link to view details about the new load balancer.</p>
+<p><img src="images/create-a-service/load-balancer-details.png" /></p>
+<p>Take note of the <strong>DNSName</strong>. This will be the hostname of our load balancer that we’ll use to hit our service after we complete the next set of steps.</p></li>
+</ol>
+<h4 id="create-the-service">4. Create the Service</h4>
+<p>Services maintain a desired number of tasks and manage registration of those tasks with a load balancer. In this section, we’ll create a new service for our Docker container.</p>
+<p><strong>✅  Step-by-step Instructions (AWS Management Console)</strong></p>
+<ol type="1">
+<li><p>Go to the AWS Management Console, click <strong>Services</strong> then select <strong>Elastic Container Service</strong> under Compute.</p></li>
+<li><p>Click <strong>workshop</strong> in the cluster list.</p></li>
+<li><p>The <strong>Services</strong> tab should be selected. Click <strong>Create</strong>.</p></li>
+<li><p>Tick the <strong>FARGATE</strong> radio button in <strong>Launch Type</strong>.</p></li>
+<li><p>Select <strong>workshop:1</strong> from <strong>Task Definition</strong>.</p></li>
+<li><p>Enter <code>workshop</code> into <strong>Service name</strong>.</p></li>
+<li><p>Enter <code>1</code> into <strong>Number of tasks</strong>.</p>
+<p><img src="images/create-a-service/configure-service.png" /></p></li>
+<li><p>Click <strong>Next step</strong>.</p></li>
+<li><p>Select the <strong>VPC</strong> created in the first module when you created the ECS cluster in the first module. If you need to find the VPC ID do one of the following:</p>
+<p><strong>AWS Management Console</strong></p>
+<ol type="1">
+<li><p>Click on <strong>Services</strong>, right-click on <strong>VPC</strong> under Networking &amp; Content Delivery and click <strong>Open Link in New Tab</strong>.</p></li>
+<li><p>Click on <strong>Your VPCs</strong> in the left-hand navigation.</p></li>
+<li><p>Click on each VPC, and click on its <strong>Tags</strong> tab. The VPC you’re looking for has a tag with <strong>Key</strong> <code>aws:cloudformation:stack-name</code> and <strong>Value</strong> <code>EC2ContainerService-workshop</code></p></li>
+</ol>
+<p><strong>AWS CLI</strong></p>
+<ol type="1">
+<li><p>Run the following command in your Cloud9 terminal:</p>
+<pre class="console"><code>aws ec2 describe-vpcs --query Vpcs[0].VpcId --output text \
+  --filters Name=tag:aws:cloudformation:stack-name,Values=EC2ContainerService-workshop</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+</ol></li>
+<li><p>Select both subnets in <strong>Subnets</strong>.</p>
+<p><img src="images/create-a-service/network-configuration.png" /></p></li>
+<li><p>Select <strong>ENABLED</strong> from <strong>Auto-assign public IP</strong>. This allows your tasks to retrieve the Docker image from Amazon ECR and stream logs to Amazon CloudWatch Logs.</p></li>
+<li><p>Under <strong>Load Balancing</strong>, tick the <strong>Application Load Balancer</strong> radio button.</p></li>
+<li><p>Click <strong>Add to load balanacer</strong>.</p></li>
+<li><p>Select <strong>80:HTTP</strong> from <strong>Listener port</strong>.</p></li>
+<li><p>Select <strong>workshop</strong> from <strong>Target group name</strong>.</p>
+<p><img src="images/create-a-service/load-balancer.png" /></p></li>
+<li><p>Click <strong>Next step</strong>.</p></li>
+<li><p>The next page allows you to define an Auto Scaling policy. Leave this set to <strong>Do not adjust the service’s desired count</strong> for now and click <strong>Next step</strong>.</p></li>
+<li><p>Review your settings and click <strong>Create Service</strong>.</p></li>
+<li><p>The service will now start your task. Click <strong>View Service</strong> and wait for your task to transition to <strong>RUNNING</strong>.</p></li>
+<li><p>Hit your task via the load balancer through the DNSName you noted in <a href="#create-an-application-load-balancer">Create an Application Load Balancer</a>. For example:</p>
+<pre class="console"><code>curl -Ss http://workshop-123456789.us-east-1.elb.amazonaws.com/quotes | jq</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+</ol>
+<p><strong>✅  Step-by-step Instructions (AWS CLI)</strong></p>
+<ol type="1">
+<li><p>Switch to the tab where you have your Cloud9 environment opened.</p></li>
+<li><p>Open the file <code>fargate-workshop-app/ecs/service.json</code> by navigating to it in the environment tree and double clicking the filename.</p></li>
+<li><p>Inspect the file contents. There are several placeholders in this file to fill-in: the ARN of the target group and the IDs of the subnets and security group created for us in the first run wizard.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode json"><code class="sourceCode json"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="fu">{</span></a>
+<a class="sourceLine" id="cb8-2" data-line-number="2">    <span class="dt">&quot;cluster&quot;</span><span class="fu">:</span> <span class="st">&quot;workshop&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb8-3" data-line-number="3">    <span class="dt">&quot;serviceName&quot;</span><span class="fu">:</span> <span class="st">&quot;workshop&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb8-4" data-line-number="4">    <span class="dt">&quot;taskDefinition&quot;</span><span class="fu">:</span> <span class="st">&quot;workshop:1&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb8-5" data-line-number="5">    <span class="dt">&quot;desiredCount&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb8-6" data-line-number="6">    <span class="dt">&quot;launchType&quot;</span><span class="fu">:</span> <span class="st">&quot;FARGATE&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb8-7" data-line-number="7">    <span class="dt">&quot;platformVersion&quot;</span><span class="fu">:</span> <span class="st">&quot;LATEST&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb8-8" data-line-number="8">    <span class="dt">&quot;loadBalancers&quot;</span><span class="fu">:</span> <span class="ot">[</span></a>
+<a class="sourceLine" id="cb8-9" data-line-number="9">        <span class="fu">{</span></a>
+<a class="sourceLine" id="cb8-10" data-line-number="10">            <span class="dt">&quot;targetGroupArn&quot;</span><span class="fu">:</span> <span class="st">&quot;YOUR_TARGET_GROUP_ARN_HERE&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb8-11" data-line-number="11">            <span class="dt">&quot;containerName&quot;</span><span class="fu">:</span> <span class="st">&quot;workshop&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb8-12" data-line-number="12">            <span class="dt">&quot;containerPort&quot;</span><span class="fu">:</span> <span class="dv">80</span></a>
+<a class="sourceLine" id="cb8-13" data-line-number="13">        <span class="fu">}</span></a>
+<a class="sourceLine" id="cb8-14" data-line-number="14">    <span class="ot">]</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb8-15" data-line-number="15">    <span class="dt">&quot;networkConfiguration&quot;</span><span class="fu">:</span> <span class="fu">{</span></a>
+<a class="sourceLine" id="cb8-16" data-line-number="16">        <span class="dt">&quot;awsvpcConfiguration&quot;</span><span class="fu">:</span> <span class="fu">{</span></a>
+<a class="sourceLine" id="cb8-17" data-line-number="17">            <span class="dt">&quot;subnets&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;YOUR_SUBNET1_ID_HERE&quot;</span><span class="ot">,</span> <span class="st">&quot;YOUR_SUBNET2_ID_HERE&quot;</span><span class="ot">]</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb8-18" data-line-number="18">            <span class="dt">&quot;securityGroups&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;YOUR_SECURITY_GROUP_ID_HERE&quot;</span><span class="ot">]</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb8-19" data-line-number="19">            <span class="dt">&quot;assignPublicIp&quot;</span><span class="fu">:</span> <span class="st">&quot;ENABLED&quot;</span></a>
+<a class="sourceLine" id="cb8-20" data-line-number="20">        <span class="fu">}</span></a>
+<a class="sourceLine" id="cb8-21" data-line-number="21">    <span class="fu">}</span></a>
+<a class="sourceLine" id="cb8-22" data-line-number="22"><span class="fu">}</span></a></code></pre></div></li>
+<li><p>Fill in the <strong>YOUR_TARGET_GROUP_ARN_HERE</strong> placeholder. To find the ARN of the target group, run this command in the Cloud9 terminal:</p>
+<pre class="console"><code>aws elbv2 describe-target-groups --names workshop --query TargetGroups[0].TargetGroupArn --output text</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+<li><p>Fill in the <strong>YOUR_SUBNET1_ID_HERE</strong> and <strong>YOUR_SUBNET2_ID_HERE</strong> placeholders. To find the IDs of the subnets created in the first run wizard, run this command in the Cloud9 terminal:</p>
+<pre class="console"><code>aws ec2 describe-subnets --query Subnets[].SubnetId --output text \
+   --filters Name=tag:aws:cloudformation:stack-name,Values=EC2ContainerService-workshop</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+<li><p>Fill in the <strong>YOUR_SECURITY_GROUP_ID_HERE</strong> placeholder. To find the ID of the security group created in the first run wizard, run this command in the Cloud9 terminal:</p>
+<pre class="console"><code>aws ec2 describe-security-groups --query SecurityGroups[].GroupId --output text \
+   --filters Name=tag:aws:cloudformation:stack-name,Values=EC2ContainerService-workshop</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+<li><p>Save the file by going to File and selecting Save in the menu bar, or pressing <strong>⌘-S</strong> (macOS) or <strong>Ctrl-S</strong> (Windows / Linux).</p></li>
+<li><p>Now that all the values are filled-in, we can create the service by running this command in the Cloud9 terminal:</p>
+<pre class="console"><code>aws ecs create-service --cli-input-json file://~/environment/fargate-workshop-app/ecs/service.json</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+<li><p>The service will now start your task. Wait for your task to transition to <strong>RUNNING</strong>. You can view the status of your task by running this in your Cloud9 terminal:</p>
+<pre class="console"><code>aws ecs describe-tasks \
+  --cluster workshop \
+  --tasks `aws ecs list-tasks --service-name workshop --cluster workshop --query taskArns[] --output text` \
+  --query tasks[].lastStatus \
+  --output text</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+<li><p>Hit your task via the load balancer through the DNSName you noted in <a href="#create-an-application-load-balancer">Create an Application Load Balancer</a>. For example:</p>
+<pre class="console"><code>curl -Ss http://workshop-123456789.us-east-1.elb.amazonaws.com/quotes | jq</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+</ol>
+<h3 id="recap">⭐ Recap</h3>
+<p>🔑  Amazon ECS services keep the desired number of tasks running and integrate with Elastic Load Balancing to distribute traffic across them.</p>
+<p>🛠️  You’ve deployed the sample application as a service behind an Application Load Balancer.</p>
+<p>🎉  You’ve completed this section!</p>
+<h3 id="next">Next</h3>
+<p>✅  If you want to dive into CI/CD, try our next section, <a href="build-a-continuous-deployment-pipeline.html">Build a Continuous Deployment Pipeline</a>, wherein you’ll use AWS CodeBuild to automatically build your container and create a CI/CD pipeline with AWS CodePipeline to orchestrate the process and deploy it to Amazon ECS.</p>
+
+</div>
+<div class='col-3 d-none d-lg-block d-xl-block'>
+<div class='toc'>
+<strong>Contents</strong>
+<ul>
+<li>
+<a href='index.html'>Welcome</a>
+</li>
+<li>
+<a href='setup.html'>Setup</a>
+<ul>
+<li>
+<a href='setup.html#aws-account'>AWS Account</a>
+</li>
+<li>
+<a href='setup.html#region'>Region</a>
+</li>
+<li>
+<a href='setup.html#aws-cloud9-ide'>AWS Cloud9 IDE</a>
+</li>
+</ul>
+</li>
+<li>
+<a href='index.html#sections'>Sections</a>
+<ul>
+<li>
+<a href='index.html#introduction'>Introduction</a>
+<ol>
+<li>
+<a href='getting-started-with-amazon-ecs-using-aws-fargate.html'>Getting Started with Amazon ECS using AWS Fargate</a>
+</li>
+<li>
+<a href='create-a-docker-image-repository.html'>Create a Docker Image Repository</a>
+</li>
+<li>
+<a href='build-and-push-a-docker-image.html'>Build and Push a Docker Image</a>
+</li>
+<li>
+<a href='create-a-service.html'>Create a Service</a>
+</li>
+</ol>
+</li>
+<li>
+<a href='index.html#cicd'>CI/CD</a>
+</li>
+<ol>
+<li>
+<a href='build-a-continuous-deployment-pipeline.html'>Build a Continuous Deployment Pipeline</a>
+</li>
+</ol>
+</ul>
+</li>
+</ul>
+</div>
+
+</div>
+</div>
+</div>
+<textarea id='buffer'></textarea>
+<footer></footer>
+<script crossorigin='anonymous' integrity='sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN' src='https://code.jquery.com/jquery-3.2.1.slim.min.js'></script>
+<script crossorigin='anonymous' integrity='sha384-b/U6ypiBEHpOf/4+1nzFpr53nxSS+GLCkfwBdFNTxtclqqenISfwAzpKaMNFNmj4' src='https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.11.0/umd/popper.min.js'></script>
+<script crossorigin='anonymous' integrity='sha384-h0AbiXch4ZDo7tp9hKZ4TsHbi047NrKGLO3SEJAg45jXxnGIfYzk4Si90RDIqNm1' src='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/js/bootstrap.min.js'></script>
+<script src='js/guide.js'></script>
+</body>

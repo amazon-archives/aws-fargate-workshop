@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<head>
+<title>Lab Guide :: Running Containers on AWS Fargate</title>
+<meta charset='utf-8'>
+<meta content='width=device-width, initial-scale=1, shrink-to-fit=no' name='viewport'>
+<link href='https://a0.awsstatic.com/main/images/site/fav/favicon.ico' rel='icon' type='image/ico'>
+<link crossorigin='anonymous' href='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/css/bootstrap.min.css' integrity='sha384-/Y6pD6FV/Vv2HJnA6t+vslU6fwYXjCFtcEpHbNJ0lyAFsXTsjBbfaDjzALeQsN6M' rel='stylesheet'>
+<link href='css/styles.css' rel='stylesheet'>
+<link href='css/syntax.css' rel='stylesheet'>
+</head>
+<body>
+<div class='container'>
+<nav class='navbar navbar-dark bg-dark'>
+<a class='navbar-brand' href='/'>
+<img src='images/aws.png'>
+</a>
+</nav>
+<div class='row'>
+<div class='col-12 col-xl-9 col-lg-9' id='guide'>
+<h1>Running Containers on AWS Fargate</h1>
+<h2 id="build-a-continuous-deployment-pipeline">Build a Continuous Deployment Pipeline</h2>
+<p>In this module you’ll build a continuous deployment pipeline to automatically move our changes from our source code repository to prodcution on check-in. We’ll use <strong>AWS CodeCommit</strong> as our source code repository, <strong>AWS CodePipeline</strong> to ochestrate the pipeline and <strong>AWS CodeBuild</strong> to build and push our Docker container.</p>
+<p>The pipeline has three stages. In the <strong>Source</strong> stage, the pipeline downloads the latest revision from CodeCommit. In <strong>Build</strong> stage, the pipeline triggers a CodeBuild build to assemble a new Docker container image and push it to Amazon ECR. In the process, it will generate a JSON file defining the new Docker image tag and which container should be update. CodePipeline will use that configuration in the <strong>Deploy</strong> stage to replace the container’s image URL within your service.</p>
+<p><img src="images/build-a-continuous-deployment-pipeline/pipeline.png" /></p>
+<h3 id="setup">Setup</h3>
+<p>Ensure that you’ve followed the <a href="setup.html">setup guide</a> before starting this module. This section builds upon the <a href="index.html#introduction">Introduction</a> section which must be completed first.</p>
+<p>For this section, you’ll require an IAM user with access to create and modify resources in the following services:</p>
+<ul>
+<li>IAM</li>
+<li>AWS CodeCommit</li>
+<li>AWS CodePipeline</li>
+<li>AWS CodeBuild</li>
+</ul>
+<h3 id="implementation">Implementation</h3>
+<h4 id="create-a-aws-codecommit-repository">1. Create a AWS CodeCommit Repository</h4>
+<p>To get started, we’ll need a place to keep our code. AWS CodeCommit is a fully-managed source control service that makes it easy to host secure and highly scalable private Git repositories.</p>
+<p><strong>✅  Step-by-step Instructions</strong></p>
+<ol type="1">
+<li><p>Go to the AWS Management Console, click <strong>Services</strong> then select <strong>CodeCommit</strong> under Developer Tools.</p></li>
+<li><p>Click <strong>Get started</strong> if this is your first visit to the CodeCommit console, or <strong>Create repository</strong> if you’ve used it before.</p></li>
+<li><p>Enter <code>workshop</code> into <strong>Repository name</strong></p></li>
+<li><p>Click <strong>Create repository</strong>.</p>
+<p><img src="images/build-a-continuous-deployment-pipeline/repo-created.png" /></p></li>
+</ol>
+<h4 id="push-the-application-to-aws-codecommit">2. Push the Application to AWS CodeCommit</h4>
+<p>Now that we have a repository, we want to push our code into it. These next few steps will configure git to use the AWS CLI credential helper, move the origin remoe to the CodeCommit repository, and push to it.</p>
+<ol type="1">
+<li><p>Switch to the tab where you have your Cloud9 environment opened. Run the next few commands in the terminal.</p></li>
+<li><p>Configure the CodeCommit AWS CLI credential helper:</p>
+<pre class="console"><code>git config --global credential.helper &#39;!aws codecommit credential-helper $@&#39;
+git config --global credential.UseHttpPath true</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+<li><p>Set the remote URL of origin to the new CodeCommit repository:</p>
+<pre class="console"><code>git remote set-url origin https://git-codecommit.us-east-1.amazonaws.com/v1/repos/workshop</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+<li><p>Push the code to CodeCommit:</p>
+<pre class="console"><code>git push origin master</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+</ol>
+<h4 id="create-a-service-role-for-aws-codebuild">3. Create a Service Role for AWS CodeBuild</h4>
+<p>CodeBuild will need permission to push to our Amazon ECR repository on our behalf. In this section, we’ll create a service role for CodeBuild that allows it to authenticate with ECR and push an image into our repository.</p>
+<p><strong>✅  Step-by-step Instruction</strong></p>
+<ol type="1">
+<li><p>Go to the AWS Management Console, click <strong>Services</strong> then select <strong>IAM</strong> under Security, Identity &amp; Compliance.</p></li>
+<li><p>Click on <strong>Roles</strong> in the left-hand navigation.</p></li>
+<li><p>Click <strong>Create role</strong>.</p></li>
+<li><p>First, we’ll configure which AWS service can assume this role. Click <strong>CodeBuild</strong> from the <strong>Choose the service that will use this role</strong> list.</p></li>
+<li><p>Next, choose <strong>CodeBuild</strong> from <strong>Select your use case</strong>.</p></li>
+<li><p>Click <strong>Next: Permissions</strong>.</p></li>
+<li><p>Click <strong>Create policy</strong>. The visual policy editor will open in a new tab.</p></li>
+<li><p>Click on <strong>Choose a service</strong> and click <strong>EC2 Container Registry</strong>.</p></li>
+<li><p>Click on <strong>Actions</strong>.</p></li>
+<li><p>Expand the <strong>Read</strong> permissions and check the <strong>BatchCheckLayerAvailability</strong> and <strong>GetAuthorizationToken</strong> checkboxes.</p></li>
+<li><p>Expand the <strong>Write</strong> permissions and check the <strong>CompleteLayerUpload</strong>, <strong>InitiateLayerUpload</strong>, <strong>PutImage</strong>, and <strong>UploadLayerPart</strong> checkboxes.</p></li>
+<li><p>Click <strong>Resources</strong> to limit the role to the <strong>workshop</strong> repository.</p></li>
+<li><p>Click <strong>Add ARN</strong> next to <strong>repository</strong>.</p></li>
+<li><p>Enter <code>us-east-1</code> in <strong>Region</strong>, your [Account ID][find-account-id] in <strong>Account</strong>, and <code>workshop</code> in <strong>repository</strong>.</p>
+<p><img src="images/build-a-continuous-deployment-pipeline/add-arn.png" /></p></li>
+<li><p>Click <strong>Add</strong>.</p>
+<p><img src="images/build-a-continuous-deployment-pipeline/visual-editor.png" /></p>
+<p>This will result in a policy allowing CodeBuild to get an authorization token via <strong>ecr:GetAuthorizationToken</strong> and the required actions to push an image to the <strong>workshop</strong> repository.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode json"><code class="sourceCode json"><a class="sourceLine" id="cb4-1" data-line-number="1"><span class="fu">{</span></a>
+<a class="sourceLine" id="cb4-2" data-line-number="2">    <span class="dt">&quot;Version&quot;</span><span class="fu">:</span> <span class="st">&quot;2012-10-17&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb4-3" data-line-number="3">    <span class="dt">&quot;Statement&quot;</span><span class="fu">:</span> <span class="ot">[</span></a>
+<a class="sourceLine" id="cb4-4" data-line-number="4">        <span class="fu">{</span></a>
+<a class="sourceLine" id="cb4-5" data-line-number="5">            <span class="dt">&quot;Effect&quot;</span><span class="fu">:</span> <span class="st">&quot;Allow&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb4-6" data-line-number="6">            <span class="dt">&quot;Action&quot;</span><span class="fu">:</span> <span class="ot">[</span></a>
+<a class="sourceLine" id="cb4-7" data-line-number="7">                <span class="st">&quot;ecr:CompleteLayerUpload&quot;</span><span class="ot">,</span></a>
+<a class="sourceLine" id="cb4-8" data-line-number="8">                <span class="st">&quot;ecr:UploadLayerPart&quot;</span><span class="ot">,</span></a>
+<a class="sourceLine" id="cb4-9" data-line-number="9">                <span class="st">&quot;ecr:InitiateLayerUpload&quot;</span><span class="ot">,</span></a>
+<a class="sourceLine" id="cb4-10" data-line-number="10">                <span class="st">&quot;ecr:BatchCheckLayerAvailability&quot;</span><span class="ot">,</span></a>
+<a class="sourceLine" id="cb4-11" data-line-number="11">                <span class="st">&quot;ecr:PutImage&quot;</span></a>
+<a class="sourceLine" id="cb4-12" data-line-number="12">            <span class="ot">]</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb4-13" data-line-number="13">            <span class="dt">&quot;Resource&quot;</span><span class="fu">:</span> <span class="st">&quot;arn:aws:ecr:us-east-1:123456789012:repository/workshop&quot;</span></a>
+<a class="sourceLine" id="cb4-14" data-line-number="14">        <span class="fu">}</span><span class="ot">,</span></a>
+<a class="sourceLine" id="cb4-15" data-line-number="15">        <span class="fu">{</span></a>
+<a class="sourceLine" id="cb4-16" data-line-number="16">            <span class="dt">&quot;Sid&quot;</span><span class="fu">:</span> <span class="st">&quot;VisualEditor1&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb4-17" data-line-number="17">            <span class="dt">&quot;Effect&quot;</span><span class="fu">:</span> <span class="st">&quot;Allow&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb4-18" data-line-number="18">            <span class="dt">&quot;Action&quot;</span><span class="fu">:</span> <span class="st">&quot;ecr:GetAuthorizationToken&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb4-19" data-line-number="19">            <span class="dt">&quot;Resource&quot;</span><span class="fu">:</span> <span class="st">&quot;*&quot;</span></a>
+<a class="sourceLine" id="cb4-20" data-line-number="20">        <span class="fu">}</span></a>
+<a class="sourceLine" id="cb4-21" data-line-number="21">    <span class="ot">]</span></a>
+<a class="sourceLine" id="cb4-22" data-line-number="22"><span class="fu">}</span></a></code></pre></div></li>
+<li><p>Click <strong>Review policy</strong>.</p></li>
+<li><p>Enter <code>WorkshopBuildPolicy</code> in <strong>Name</strong>.</p>
+<p><img src="images/build-a-continuous-deployment-pipeline/review-policy.png" /></p></li>
+<li><p>Click <strong>Create policy</strong>.</p>
+<p><img src="images/build-a-continuous-deployment-pipeline/policy-confirmation.png" /></p></li>
+<li><p>Return to the original tab where you were creating the role. Click <strong>Refresh</strong> and type <code>WorkshopBuildPolicy</code> in the <strong>Filter</strong> textbox. Check the <strong>WorkshopBuildPolicy</strong> checkbox. Click <strong>Next: Review</strong>.</p></li>
+<li><p>Enter <code>WorkshopBuildRole</code> in <strong>Role name</strong>.</p>
+<p><img src="images/build-a-continuous-deployment-pipeline/review-role.png" /></p></li>
+<li><p>Click <strong>Create role</strong>.</p></li>
+</ol>
+<h4 id="build-the-continuous-deployment-pipeline">4. Build the Continuous Deployment Pipeline</h4>
+<ol type="1">
+<li><p>Go to the AWS Management Console, click <strong>Services</strong> then select <strong>CodePipeline</strong> under Developer Tools.</p></li>
+<li><p>Click <strong>Get started</strong> if this is your first visit to the CodePipeline console, or <strong>Create pipeline</strong> if you’ve used it before.</p></li>
+<li><p>Enter <code>workshop</code> into <strong>Pipeline name</strong>.</p></li>
+<li><p>Click <strong>Next step</strong>.</p></li>
+<li><p>Select <strong>AWS CodeCommit</strong> from <strong>Source provider</strong>.</p></li>
+<li><p>Enter <code>workshop</code> into <strong>Repository name</strong>.</p></li>
+<li><p>Enter <code>master</code> into <strong>Branch name</strong>.</p>
+<p><img src="images/build-a-continuous-deployment-pipeline/source.png" /></p></li>
+<li><p>Click <strong>Next step</strong>.</p></li>
+<li><p>Select <strong>AWS CodeBuild</strong> from <strong>Build provider</strong>.</p></li>
+<li><p>Tick the <strong>Create a new build project</strong> radio button.</p></li>
+<li><p>Enter <code>workshop</code> into <strong>Project Name</strong>.</p></li>
+<li><p>Select <strong>Ubuntu</strong> from <strong>Operating system</strong>.</p></li>
+<li><p>Select <strong>Docker</strong> from <strong>Runtime</strong>.</p></li>
+<li><p>Select <strong>aws/codebuild/docker:17.09.0</strong> from <strong>Version</strong>.</p></li>
+<li><p>Tick the <strong>Choose an existing service role from your account</strong> under <strong>AWS CodeBuild service role</strong>.</p></li>
+<li><p>Enter <code>WorkshopBuildRole</code> in <strong>Role name</strong>.</p>
+<p><img src="images/build-a-continuous-deployment-pipeline/service-role.png" /></p></li>
+<li><p>Extend <strong>Advanced Settings</strong>. Create an <strong>Environment Variable</strong> for the Amazon ECR repository URI. Enter <code>REPOSITORY_URI</code> into <strong>Name</strong> and the repository URI of the Amazon ECR repository as the value.</p>
+<p>If you need to find it quickly, switch to your Cloud9 terminal and run:</p>
+<pre class="console"><code>aws ecr describe-repositories --repository-name workshop --query repositories[0].repositoryUri --output text</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button>
+<p><img src="images/build-a-continuous-deployment-pipeline/env-var.png" /></p></li>
+<li><p>Click <strong>Save build project</strong>.</p></li>
+<li><p>Click <strong>Next step</strong>.</p></li>
+<li><p>Select <strong>Amazon ECS</strong> from <strong>Deployment provider</strong>.</p></li>
+<li><p>Enter <code>workshop</code> into <strong>Cluster name</strong>.</p></li>
+<li><p>Enter <code>workshop</code> into <strong>Service name</strong>.</p></li>
+<li><p>Enter <code>images.json</code> into <strong>Image filename</strong>. This is the JSON file generated by the build process that informs CodePipeline and ECS which container should be updated and with what image.</p>
+<p><img src="images/build-a-continuous-deployment-pipeline/deploy.png" /></p></li>
+<li><p>Click <strong>Next step</strong>.</p></li>
+<li><p>Click <strong>Create role</strong>.</p></li>
+<li><p>This will create a new role for CodePipeline to assume to interact with other AWS services. Click <strong>View Policy Document</strong> to inspect the permissions it will be granted. Then, click <strong>Allow</strong>.</p></li>
+<li><p>Click <strong>Next step</strong>.</p></li>
+<li><p>Review the details of the pipeline you’ve configured.</p>
+<p><img src="images/build-a-continuous-deployment-pipeline/pipeline-details.png" /></p></li>
+<li><p>Click <strong>Create pipeline</strong>.</p></li>
+</ol>
+<h4 id="deploy-a-new-revision">5. Deploy a New Revision</h4>
+<ol type="1">
+<li><p>Switch to the tab where you have your Cloud9 environment opened.</p></li>
+<li><p>Open the file <code>fargate-workshop-app/index.js</code> by navigating to it in the environment tree and double clicking the filename.</p></li>
+<li><p>Scroll down until you find the commented out delete action.</p>
+<p><img src="images/build-a-continuous-deployment-pipeline/commented-code.png" /></p></li>
+<li><p>Uncomment the code block. You can do this by selecting the code block, going to <strong>Edit</strong>, <strong>Comment</strong>, and selecting <strong>Toggle Comment</strong> in the menu bar, or processing <strong>⌘-/</strong> (macOS) or <strong>Ctrl-/</strong> (Windows / Linux).</p></li>
+<li><p>Save the file by going to <strong>File</strong> and selecting <strong>Save</strong> in the menu bar, or pressing <strong>⌘SS</strong> (macOS) or <strong>Ctrl-S</strong> (Windows / Linux).</p></li>
+<li><p>Check in the changes by running the following command in the Cloud9 terminal:</p>
+<pre class="console"><code>git commit -am &quot;Adding delete action&quot;</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+<li><p>Push the changes to the CodeCommit repository by running the following command in the Cloud9 terminal:</p>
+<pre class="console"><code>git push origin master</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+<li><p>Go to the AWS Management Console, click <strong>Services</strong> then select <strong>CodePipeline</strong> under Developer Tools.</p></li>
+<li><p>Click on <strong>workshop</strong>.</p></li>
+<li><p>You’ll see the changes move through the pipeline. While a stage is in progress, CodePipeline indicates this by displaying the stage with a blue color. If successful it’ll turn green, if there’s an error or other issue and the pipeline can’t proceed, it’ll turn red. Wait for the pipeline to complete.</p></li>
+<li><p>Switch back to your Cloud9 terminal to test the new endpoint. First, create a new quotation by hitting your service through the DNSName of the your load balancer. Replace the hostname in the following command:</p>
+<pre class="console"><code>curl -Ssi http://YOUR_LOAD_BALANCER_DNSNAME_HERE/quotes -X PUT -H &quot;Content-Type: application/json&quot; -d &#39;{&quot;Text&quot;:&quot;If you don’t fail at least 90 percent of the time, you’re not aiming high enough.&quot;,&quot;AttributedTo&quot;:&quot;Alan Kay&quot;}&#39;</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button>
+<p>You’ll get back the HTTP response including a Location header of your newly created quotation:</p>
+<pre class="console"><code>HTTP/1.1 201 Created
+X-Powered-By: Express
+Location: /quotes/93752220-f995-11e7-b1fc-e1cb57d4a62c
+Vary: Accept
+Content-Type: text/plain; charset=utf-8
+Content-Length: 68
+Date: Mon, 15 Jan 2018 01:44:07 GMT
+Connection: keep-alive
+
+Created. Redirecting to /quotes/93752220-f995-11e7-b1fc-e1cb57d4a62c</code></pre></li>
+<li><p>Test your deployment by testing the newly created delete endpoint. Hit the location header above with the DELETE method. For example, for the above output, our command would be:</p>
+<pre class="console"><code>curl -Ss http://YOUR_LOAD_BALANCER_DNSNAME_HERE/quotes/93752220-f995-11e7-b1fc-e1cb57d4a62c -X DELETE</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+</ol>
+<h3 id="recap">⭐ Recap</h3>
+<p>🔑  A continuous deployment pipeline is an automated manifestion of the process for getting your software from version control to your users. AWS CodePipeline is a managed continuous delivery service that builds, tests, and deploys your code on source control changes.</p>
+<p>🛠️  You’ve created a repository for your application in AWS CodeCommit, mapped your git remote, and pushed your code to it.</p>
+<p>🛠️  You’ve built a continuous deployment pipeline using AWS CodePipeline and configured a build project in AWS CodeBuild. Any changes in the master branch to your project will be automatically built as a Docker image, pushed to Amazon ECR, and deployed to Amazon ECR using AWS Fargate.</p>
+<p>🎉  You’ve completed this section!</p>
+
+</div>
+<div class='col-3 d-none d-lg-block d-xl-block'>
+<div class='toc'>
+<strong>Contents</strong>
+<ul>
+<li>
+<a href='index.html'>Welcome</a>
+</li>
+<li>
+<a href='setup.html'>Setup</a>
+<ul>
+<li>
+<a href='setup.html#aws-account'>AWS Account</a>
+</li>
+<li>
+<a href='setup.html#region'>Region</a>
+</li>
+<li>
+<a href='setup.html#aws-cloud9-ide'>AWS Cloud9 IDE</a>
+</li>
+</ul>
+</li>
+<li>
+<a href='index.html#sections'>Sections</a>
+<ul>
+<li>
+<a href='index.html#introduction'>Introduction</a>
+<ol>
+<li>
+<a href='getting-started-with-amazon-ecs-using-aws-fargate.html'>Getting Started with Amazon ECS using AWS Fargate</a>
+</li>
+<li>
+<a href='create-a-docker-image-repository.html'>Create a Docker Image Repository</a>
+</li>
+<li>
+<a href='build-and-push-a-docker-image.html'>Build and Push a Docker Image</a>
+</li>
+<li>
+<a href='create-a-service.html'>Create a Service</a>
+</li>
+</ol>
+</li>
+<li>
+<a href='index.html#cicd'>CI/CD</a>
+</li>
+<ol>
+<li>
+<a href='build-a-continuous-deployment-pipeline.html'>Build a Continuous Deployment Pipeline</a>
+</li>
+</ol>
+</ul>
+</li>
+</ul>
+</div>
+
+</div>
+</div>
+</div>
+<textarea id='buffer'></textarea>
+<footer></footer>
+<script crossorigin='anonymous' integrity='sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN' src='https://code.jquery.com/jquery-3.2.1.slim.min.js'></script>
+<script crossorigin='anonymous' integrity='sha384-b/U6ypiBEHpOf/4+1nzFpr53nxSS+GLCkfwBdFNTxtclqqenISfwAzpKaMNFNmj4' src='https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.11.0/umd/popper.min.js'></script>
+<script crossorigin='anonymous' integrity='sha384-h0AbiXch4ZDo7tp9hKZ4TsHbi047NrKGLO3SEJAg45jXxnGIfYzk4Si90RDIqNm1' src='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/js/bootstrap.min.js'></script>
+<script src='js/guide.js'></script>
+</body>

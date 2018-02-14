@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<head>
+<title>Lab Guide :: Running Containers on AWS Fargate</title>
+<meta charset='utf-8'>
+<meta content='width=device-width, initial-scale=1, shrink-to-fit=no' name='viewport'>
+<link href='https://a0.awsstatic.com/main/images/site/fav/favicon.ico' rel='icon' type='image/ico'>
+<link crossorigin='anonymous' href='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/css/bootstrap.min.css' integrity='sha384-/Y6pD6FV/Vv2HJnA6t+vslU6fwYXjCFtcEpHbNJ0lyAFsXTsjBbfaDjzALeQsN6M' rel='stylesheet'>
+<link href='css/styles.css' rel='stylesheet'>
+<link href='css/syntax.css' rel='stylesheet'>
+</head>
+<body>
+<div class='container'>
+<nav class='navbar navbar-dark bg-dark'>
+<a class='navbar-brand' href='/'>
+<img src='images/aws.png'>
+</a>
+</nav>
+<div class='row'>
+<div class='col-12 col-xl-9 col-lg-9' id='guide'>
+<h1>Running Containers on AWS Fargate</h1>
+<h2 id="build-and-push-a-docker-image">Build and Push a Docker Image</h2>
+<p>This module walks through the process of building and pushing a Docker image of a small web application for later deployment. A Docker image is a deployable artifact that includes both application code and its dependencies. In this module, you’ll clone a repository from GitHub into your AWS Cloud9 workspace, build a Docker image from it, test it, and push it to the Amazon ECR repository created in the previous module.</p>
+<p>The sample application is a simple web application for storing notable quotations. It’s written as a <a href="http://nodejs.org">node.js</a> application and uses the <a href="http://expressjs.com">Express</a> web framework and the <a href="https://aws.amazon.com/sdk-for-node-js/">AWS SDK</a>. Quotations are stored in a simple DynamoDB table called <code>quotes</code>.</p>
+<p>The application has four endpoints:</p>
+<table>
+<thead>
+<tr class="header">
+<th>Endpoint</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>PUT /quotes</td>
+<td>Create a new quotation</td>
+</tr>
+<tr class="even">
+<td>GET /quotes/:quote_id</td>
+<td>Show a specific quotation</td>
+</tr>
+<tr class="odd">
+<td>GET /quotes</td>
+<td>Show all quotations</td>
+</tr>
+<tr class="even">
+<td>GET /</td>
+<td>Show status information</td>
+</tr>
+</tbody>
+</table>
+<h3 id="implementation">Implementation</h3>
+<h4 id="build-the-docker-image">1. Build the Docker Image</h4>
+<p>Clone the sample application from the <a href="https://github.com/jpignata/fargate">GitHub repo</a> and build it using a tag of your repository from the repository URI you noted in the previous module.</p>
+<p><strong>✅  Step-by-step Instructions</strong></p>
+<ol type="1">
+<li><p>Switch to the tab where you have your Cloud9 environment opened.</p></li>
+<li><p>Clone the contents of the sample application to your environment by running <code>git clone https://github.com/jpignata/fargate-workshop-app</code> in the Cloud9 terminal:</p>
+<pre class="console"><code>git clone https://github.com/jpignata/fargate-workshop-app</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button>
+<pre class="console"><code>Admin:~/environment $ git clone https://github.com/jpignata/fargate-workshop-app
+Cloning into &#39;fargate-workshop-app&#39;...
+remote: Counting objects: 6, done.
+remote: Compressing objects: 100% (5/5), done.
+remote: Total 6 (delta 0), reused 6 (delta 0), pack-reused 0
+Unpacking objects: 100% (6/6), done.</code></pre></li>
+<li><p>The <code>fargate-workshop-app</code> directory will now appear in the environment explorer in the left-hand module. Expand it by clicking on it and open the files in the directory by double clicking on them.</p>
+<p><img src="images/build-environment-tree.png" /></p></li>
+<li><p>Open the Dockerfile and inspect its contents. A <a href="https://docs.docker.com/engine/reference/builder/">Dockerfile</a> is a text document that contains all the commands a user could call on the command line to assemble an image.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode dockerfile"><code class="sourceCode dockerfile"><a class="sourceLine" id="cb3-1" data-line-number="1"><span class="kw">FROM</span> node:8.9.4             <span class="co"># Use node:8.9.4 as the base image</span></a>
+<a class="sourceLine" id="cb3-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb3-3" data-line-number="3"><span class="kw">WORKDIR</span> /app                <span class="co"># Set the working directory for future commands</span></a>
+<a class="sourceLine" id="cb3-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb3-5" data-line-number="5"><span class="kw">ENV</span> PORT=80                 <span class="co"># Set an environment variable in the container</span></a>
+<a class="sourceLine" id="cb3-6" data-line-number="6"></a>
+<a class="sourceLine" id="cb3-7" data-line-number="7"><span class="kw">EXPOSE</span> 80                   <span class="co"># Indicates that your container will listen on TCP 80</span></a>
+<a class="sourceLine" id="cb3-8" data-line-number="8"></a>
+<a class="sourceLine" id="cb3-9" data-line-number="9"><span class="kw">ADD</span> index.js /app           <span class="co"># Add index.js and package.json to</span></a>
+<a class="sourceLine" id="cb3-10" data-line-number="10"><span class="kw">ADD</span> package.json /app       <span class="co">#    the /app directory</span></a>
+<a class="sourceLine" id="cb3-11" data-line-number="11"></a>
+<a class="sourceLine" id="cb3-12" data-line-number="12"><span class="kw">RUN</span> npm install --silent    <span class="co"># Install dependencies into image</span></a>
+<a class="sourceLine" id="cb3-13" data-line-number="13"></a>
+<a class="sourceLine" id="cb3-14" data-line-number="14"><span class="kw">CMD</span> [<span class="st">&quot;node&quot;</span>, <span class="st">&quot;index.js&quot;</span>]    <span class="co"># Set default command for containers run from</span></a>
+<a class="sourceLine" id="cb3-15" data-line-number="15">                            <span class="co">#    this image</span></a></code></pre></div></li>
+<li><p>In the Cloud9 terminal, change your working directory to the newly cloned application directory by running: <code>cd fargate-workshop-app</code>.</p>
+<pre class="console"><code>cd fargate-workshop-app</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+<li><p>Build the Docker image and tag it using the repository URI you noted in the previous module. For example, if the repository URI were <code>123456789012.dkr.ecr.us-east-1.amazonaws.com/workshop</code>, then you’d run:</p>
+<pre class="console"><code>docker build --tag 123456789012.dkr.ecr.us-east-1.amazonaws.com/workshop .</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button>
+<p>Ensure that you change the image name to the repository URI you noted in the previous module. You’ll see Docker building the image by applying each directive of the above Dockerfile in realtime:</p>
+<pre class="console"><code>Admin:~/environment/fargate-workshop-app (master) $ docker build --tag 123456789012.dkr.ecr.us-east-1.amazonaws.com/workshop .
+Sending build context to Docker daemon  59.39kB
+Step 1/8 : FROM node:8.9.4
+8.9.4: Pulling from library/node
+f49cf87b52c1: Pull complete
+7b491c575b06: Extracting [==================================================&gt;]  19.27MB/19.27MB
+b313b08bab3b: Download complete
+51d6678c3f0e: Downloading [===================&gt;                              ]  51.8MB/135MB
+da59faba155b: Download complete
+7f84ea62c1fd: Download complete
+0ae80f895f02: Downloading [=&gt;                                                ]  190kB/18.51MB
+2f11c95c9552: Waiting
+...</code></pre></li>
+<li><p>Verify that your Docker image has been built with the correct tag by running <code>docker images &lt;repository URI&gt;</code> in the Cloud9 terminal. For example:</p>
+<pre class="console"><code>docker images 123456789012.dkr.ecr.us-east-1.amazonaws.com/workshop</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button>
+<pre class="console"><code>Admin:~/environment/fargate-workshop-app (master) $ docker images 123456789012.dkr.ecr.us-east-1.amazonaws.com/workshop
+REPOSITORY                                              TAG                 IMAGE ID            CREATED             SIZE
+123456789012.dkr.ecr.us-east-1.amazonaws.com/workshop   latest              7fca0f295425        35 seconds ago      714MB</code></pre></li>
+</ol>
+<h4 id="create-the-dynamodb-table">2. Create the DynamoDB Table</h4>
+<p>Create a DynamoDB table called <code>quotes</code> that has a primary key called <code>ID</code> which is a string.</p>
+<p><strong>✅  Step-by-step Instructions</strong></p>
+<ol type="1">
+<li><p>Go to the AWS Management Console, click <strong>Services</strong> then select <strong>DynamoDB</strong> under Database.</p></li>
+<li><p>Click <strong>Create table</strong>.</p></li>
+<li><p>Enter <code>quotes</code> in <strong>Table name</strong> and <code>ID</code> in <strong>Primary Key</strong>. Leave the data type dropdown set to <strong>String</strong>. Leave <strong>Use default settings</strong> checked.</p>
+<p>⚠️  The table and primary key names are case-sensitive so please ensure you’ve typed <code>quotes</code> and <code>ID</code> exactly as shown.</p>
+<p><img src="images/build-dynamodb-table-create.png" /></p></li>
+<li><p>Click <strong>Create</strong>.</p></li>
+</ol>
+<h4 id="test-the-docker-image">3. Test the Docker Image</h4>
+<p>Run a Docker container in your Cloud9 environment and experiment with it using <code>curl</code> and <code>jq</code> to verify it is working.</p>
+<p><strong>✅  Step-by-step Instructions</strong></p>
+<ol type="1">
+<li><p>Switch to the tab where you have your Cloud9 environment opened.</p></li>
+<li><p>Install <code>jq</code> for JSON pretty printing.</p>
+<p>To aid in your testing, install <code>jq</code> which is a command line JSON processor. Install it by running <code>sudo yum install -y jq</code> in the Cloud9 terminal.</p>
+<pre class="console"><code>sudo yum install -y jq</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button></li>
+<li><p>Run the Docker container by running <code>docker run</code> in the Cloud9 terminal using the Docker image we built in step 1:</p>
+<pre class="console"><code>docker run --detach --publish 80:80 --volume $HOME/.aws:/root/.aws \
+  123456789012.dkr.ecr.us-east-1.amazonaws.com/workshop</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button>
+<p>You’ll need to change the last parameter to the Docker image tag you specified in step 1. Let’s look at each part of the command to understand what it is doing:</p>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 59%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Argument</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>–detach</td>
+<td>Run the container in the background to allow us to use the terminal to run other commands.</td>
+</tr>
+<tr class="even">
+<td>–publish 80:80</td>
+<td>Expose the container port 80 on the host. This will allow us to connect to 127.0.0.1:80 and that traffic will be forwarded to your application running in the container.</td>
+</tr>
+<tr class="odd">
+<td>–volume $HOME/.aws:/root/.aws</td>
+<td>Mount your AWS configuration onto the container. This gives your application access to your AWS credentials for use in testing.</td>
+</tr>
+<tr class="even">
+<td>123456789012.dkr.ecr.us-east-1.amazonaws.com/workshop</td>
+<td>The docker image to run. Replace this parameter with the tag you used in step 1.</td>
+</tr>
+</tbody>
+</table></li>
+<li><p>Test the application using <code>curl</code>:</p>
+<pre class="console"><code>curl -Ss http://127.0.0.1/ | jq</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button>
+<p>If the application is running, you’ll see a JSON object with the hostname which will match the container ID you saw after running the previous step:</p>
+<pre class="console"><code>Admin:~/environment/fargate-workshop-app (master) $ curl -Ss http://127.0.0.1/ | jq</code></pre>
+<div class="sourceCode" id="cb13"><pre class="sourceCode json"><code class="sourceCode json"><a class="sourceLine" id="cb13-1" data-line-number="1"><span class="fu">{</span></a>
+<a class="sourceLine" id="cb13-2" data-line-number="2">  <span class="dt">&quot;Hostname&quot;</span><span class="fu">:</span> <span class="st">&quot;7826aae1b21e&quot;</span></a>
+<a class="sourceLine" id="cb13-3" data-line-number="3"><span class="fu">}</span></a></code></pre></div></li>
+<li><p>Next, hit the quotes index endpoint to list all quotes in the database.</p>
+<pre class="console"><code>curl -Ss http://127.0.0.1/quotes | jq</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button>
+<p>As we haven’t added any quotes yet, we’ll see an empty array:</p>
+<pre class="console"><code>Admin:~/environment/fargate-workshop-app (master) $ curl -Ss http://127.0.0.1/quotes | jq</code></pre>
+<div class="sourceCode" id="cb16"><pre class="sourceCode json"><code class="sourceCode json"><a class="sourceLine" id="cb16-1" data-line-number="1"><span class="ot">[]</span></a></code></pre></div></li>
+<li><p>Add a quote to the database:</p>
+<pre class="console"><code>curl -Ss http://127.0.0.1/quotes -X PUT -H &quot;Content-Type: application/json&quot; -d &#39;{&quot;Text&quot;:&quot;There are no passengers on spaceship earth. We are all crew.&quot;,&quot;AttributedTo&quot;:&quot;Marshall McLuhan&quot;}&#39;</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button>
+<p>This command sends the following JSON object to the quotes create endpoint:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode json"><code class="sourceCode json"><a class="sourceLine" id="cb18-1" data-line-number="1"><span class="fu">{</span></a>
+<a class="sourceLine" id="cb18-2" data-line-number="2">  <span class="dt">&quot;Text&quot;</span><span class="fu">:</span> <span class="st">&quot;There are no passengers on spaceship earth. We are all crew.&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb18-3" data-line-number="3">  <span class="dt">&quot;AttributedTo&quot;</span><span class="fu">:</span> <span class="st">&quot;Marshall McLuhan&quot;</span></a>
+<a class="sourceLine" id="cb18-4" data-line-number="4"><span class="fu">}</span></a></code></pre></div></li>
+<li><p>Hit the quotes index endpoint to list all quotes in the database to verify the quote has been added:</p>
+<pre class="console"><code>curl -Ss http://127.0.0.1/quotes | jq</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button>
+<p>The output will resemble this, with a different UUID:</p>
+<pre class="console"><code>Admin:~/environment/fargate-workshop-app (master) $ curl -Ss http://127.0.0.1/quotes | jq</code></pre>
+<div class="sourceCode" id="cb21"><pre class="sourceCode json"><code class="sourceCode json"><a class="sourceLine" id="cb21-1" data-line-number="1"><span class="ot">[</span></a>
+<a class="sourceLine" id="cb21-2" data-line-number="2">  <span class="fu">{</span></a>
+<a class="sourceLine" id="cb21-3" data-line-number="3">    <span class="dt">&quot;ID&quot;</span><span class="fu">:</span> <span class="st">&quot;3d1b9e30-f2fc-11e7-8bd2-99431fe07864&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb21-4" data-line-number="4">    <span class="dt">&quot;AttributedTo&quot;</span><span class="fu">:</span> <span class="st">&quot;Marshall McLuhan&quot;</span><span class="fu">,</span></a>
+<a class="sourceLine" id="cb21-5" data-line-number="5">    <span class="dt">&quot;Text&quot;</span><span class="fu">:</span> <span class="st">&quot;There are no passengers on spaceship earth. We are all crew.&quot;</span></a>
+<a class="sourceLine" id="cb21-6" data-line-number="6">  <span class="fu">}</span></a>
+<a class="sourceLine" id="cb21-7" data-line-number="7"><span class="ot">]</span></a></code></pre></div></li>
+</ol>
+<h4 id="push-the-docker-image">4. Push the Docker Image</h4>
+<p>Log into your Amazon ECR registry and push the Docker image into its repository.</p>
+<p><strong>✅  Step-by-step Instructions</strong></p>
+<ol type="1">
+<li><p>Switch to the tab where you have your Cloud9 environment opened.</p></li>
+<li><p>Log into your Amazon ECR registry using the helper provided by the AWS CLI in the Cloud9 terminal:</p>
+<pre class="console"><code>$(aws ecr get-login --no-include-email)</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button>
+<pre class="console"><code>Admin:~/environment/fargate-workshop-app (master) $ $(aws ecr get-login --no-include-email)
+Login Succeeded</code></pre></li>
+<li><p>Push your Docker image. Ensure you change the image to the image tag you used in step 1:</p>
+<pre class="console"><code>docker push 123456789012.dkr.ecr.us-east-1.amazonaws.com/workshop</code></pre>
+<button class="btn btn-outline-primary copy">
+Copy to Clipboard
+</button>
+<p>You’ll see the Docker image being pushed:</p>
+<pre class="console"><code>Admin:~/environment/fargate-workshop-app (master) $ docker push 123456789012.dkr.ecr.us-east-1.amazonaws.com/workshop
+The push refers to a repository [123456789012.dkr.ecr.us-east-1.amazonaws.com/workshop]
+e27327a08730: Pushing [=======================================&gt;           ]  29.72MB/37.67MB
+966f0d7cf16c: Pushed
+719df9cfe13b: Pushed
+f9cc7569a18f: Pushed
+092504c250f7: Pushing [==================================================&gt;]  4.184MB
+299e6ab856be: Waiting
+50599c766115: Waiting
+d4141af68ac4: Waiting
+8fe6d5dcea45: Waiting
+06b8d020c11b: Waiting
+b9914afd042f: Waiting
+4bcdffd70da2: Waiting</code></pre></li>
+</ol>
+<h3 id="recap">⭐ Recap</h3>
+<p>🔑  Docker images are deployable artifacts that include both application code and its dependencies bundled.</p>
+<p>🛠️  You built a sample application with four simple REST endpoint and pushed it to the Amazon ECR repository created in <a href="#create-a-docker-image-repository">Create a Docker Image Repository</a>.</p>
+<p>🛠️  You created a DynamoDB table named <code>quotes</code> to store data for your sample application.</p>
+<h3 id="next">Next</h3>
+<p>✅  Proceed to the next module, <a href="create-a-service.html">Create a Service</a>, wherein you’ll configure a task definition and its IAM role, create a load balancer, and create a new ECS service for this Docker container.</p>
+
+</div>
+<div class='col-3 d-none d-lg-block d-xl-block'>
+<div class='toc'>
+<strong>Contents</strong>
+<ul>
+<li>
+<a href='index.html'>Welcome</a>
+</li>
+<li>
+<a href='setup.html'>Setup</a>
+<ul>
+<li>
+<a href='setup.html#aws-account'>AWS Account</a>
+</li>
+<li>
+<a href='setup.html#region'>Region</a>
+</li>
+<li>
+<a href='setup.html#aws-cloud9-ide'>AWS Cloud9 IDE</a>
+</li>
+</ul>
+</li>
+<li>
+<a href='index.html#sections'>Sections</a>
+<ul>
+<li>
+<a href='index.html#introduction'>Introduction</a>
+<ol>
+<li>
+<a href='getting-started-with-amazon-ecs-using-aws-fargate.html'>Getting Started with Amazon ECS using AWS Fargate</a>
+</li>
+<li>
+<a href='create-a-docker-image-repository.html'>Create a Docker Image Repository</a>
+</li>
+<li>
+<a href='build-and-push-a-docker-image.html'>Build and Push a Docker Image</a>
+</li>
+<li>
+<a href='create-a-service.html'>Create a Service</a>
+</li>
+</ol>
+</li>
+<li>
+<a href='index.html#cicd'>CI/CD</a>
+</li>
+<ol>
+<li>
+<a href='build-a-continuous-deployment-pipeline.html'>Build a Continuous Deployment Pipeline</a>
+</li>
+</ol>
+</ul>
+</li>
+</ul>
+</div>
+
+</div>
+</div>
+</div>
+<textarea id='buffer'></textarea>
+<footer></footer>
+<script crossorigin='anonymous' integrity='sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN' src='https://code.jquery.com/jquery-3.2.1.slim.min.js'></script>
+<script crossorigin='anonymous' integrity='sha384-b/U6ypiBEHpOf/4+1nzFpr53nxSS+GLCkfwBdFNTxtclqqenISfwAzpKaMNFNmj4' src='https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.11.0/umd/popper.min.js'></script>
+<script crossorigin='anonymous' integrity='sha384-h0AbiXch4ZDo7tp9hKZ4TsHbi047NrKGLO3SEJAg45jXxnGIfYzk4Si90RDIqNm1' src='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/js/bootstrap.min.js'></script>
+<script src='js/guide.js'></script>
+</body>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<head>
+<title>Lab Guide :: Running Containers on AWS Fargate</title>
+<meta charset='utf-8'>
+<meta content='width=device-width, initial-scale=1, shrink-to-fit=no' name='viewport'>
+<link href='https://a0.awsstatic.com/main/images/site/fav/favicon.ico' rel='icon' type='image/ico'>
+<link crossorigin='anonymous' href='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/css/bootstrap.min.css' integrity='sha384-/Y6pD6FV/Vv2HJnA6t+vslU6fwYXjCFtcEpHbNJ0lyAFsXTsjBbfaDjzALeQsN6M' rel='stylesheet'>
+<link href='css/styles.css' rel='stylesheet'>
+<link href='css/syntax.css' rel='stylesheet'>
+</head>
+<body>
+<div class='container'>
+<nav class='navbar navbar-dark bg-dark'>
+<a class='navbar-brand' href='/'>
+<img src='images/aws.png'>
+</a>
+</nav>
+<div class='row'>
+<div class='col-12 col-xl-9 col-lg-9' id='guide'>
+<h1>Running Containers on AWS Fargate</h1>
+<h2 id="getting-started-with-amazon-ecs-using-aws-fargate">Getting Started with Amazon ECS using AWS Fargate</h2>
+<p>In this module, you’ll create your first Amazon ECS <strong>cluster</strong>, define a <strong>task definition</strong> and a <strong>container definition</strong>, and deploy a <strong>service</strong> onto the cluster from these definitions..</p>
+<table>
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 83%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Object</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Cluster</td>
+<td>Logical grouping of tasks and services. Infrastructure may be shared between tasks and services running on the same cluster.</td>
+</tr>
+<tr class="even">
+<td>Task Definition</td>
+<td>Blueprint for our application. Defines attributes such as CPU and memory requirements, networking configuration, and container definitions.</td>
+</tr>
+<tr class="odd">
+<td>Container Definition</td>
+<td>Configuration for a container to run as part of our task. Defines attributes of the container including port mappings, resources requirements, environment variables, etc.</td>
+</tr>
+<tr class="even">
+<td>Service</td>
+<td>Maintains a specified number of running simultaneous instances of a task definition in an ECS cluster</td>
+</tr>
+</tbody>
+</table>
+<p>You’ll deploy a service via Amazon ECS using AWS Fargate as the launch type. The Fargate launch type allows you to run your containerized applications without the need to provision and manage the backend infrastructure. Amazon ECS also can launch tasks and services using the EC2 launch type which runs containerized applications on Amazon EC2 instances that you manage. Amazon ECS is the orchestration service responsible for running docker containers and AWS Fargate is the underlying compute platform where the containers will run.</p>
+<h3 id="setup">Setup</h3>
+<p>Ensure that you’ve followed the <a href="#setup">setup guide</a> before starting this module. For this section, you’ll require an IAM user with access to create and modify resources in the following services:</p>
+<ul>
+<li>Amazon ECS</li>
+<li>Amazon ECR</li>
+<li>IAM</li>
+<li>Amazon DynamoDB</li>
+</ul>
+<h3 id="implementation">Implementation</h3>
+<p>Using the <a href="https://console.aws.amazon.com/ecs/home?region=us-east-1#/firstRun">Amazon ECS first run wizard</a>, create an ECS cluster, define a new task definition for a Hello World application, and deploy it as a service onto the new cluster.</p>
+<p><strong>✅   Step-by-step Instructions</strong></p>
+<ol type="1">
+<li><p>Go to the AWS Management Console, click <strong>Services</strong> then select <strong>Elastic Container Service</strong> under Compute. If you’ve never used the service before, you’ll see a <strong>Getting started</strong> button which will take you to the first run wizard. If you do not see this button, <a href="https://console.aws.amazon.com/ecs/home?region=us-east-1#/firstRun">navigate to the wizard directly</a>.</p></li>
+<li><p>The first page of the wizard outlines configuration details to build our new task definition. We’re going to leave the defaults, but read through them to see what’s being configured. It will define a new task definition with a container definition for <strong>sample-app</strong> which is a container running Apache httpd with a splash page. Note that the task will run using the <strong>FARGATE</strong> launch type and it is configured for <strong>0.5GB of RAM</strong> and <strong>1/4th of a vCPU</strong>. Click <strong>Next</strong>.</p>
+<p><img src="images/getting-started-with-amazon-ecs-using-aws-fargate/container-and-task-definition.png" /></p></li>
+<li><p>The next page outlines configuration details for our service. By default it will create an app called <strong>simple-app-service</strong> running a single task in a new security group. Note we can optionally create a load balancer here to distribute traffic across tasks in our service. We won’t do this here but will later in the workshop. Leave the defaults and click <strong>Next</strong>.</p>
+<p><img src="images/getting-started-with-amazon-ecs-using-aws-fargate/service.png" /></p></li>
+<li><p>The last page of the wizard allows us to name our cluster. Enter <code>workshop</code> into <strong>Cluster name</strong>. Click <strong>Next</strong>.</p>
+<p><img src="images/getting-started-with-amazon-ecs-using-aws-fargate/cluster.png" /></p></li>
+<li><p>Review the details of the new task definition, service, and cluster on the next page and click <strong>Create</strong>.</p>
+<p><img src="images/getting-started-with-amazon-ecs-using-aws-fargate/review.png" /></p></li>
+<li><p>The first run wizard will create the task definition, service, and cluster and all supporting infrastructure. It will show you its progress as it runs:</p>
+<p><img src="images/getting-started-with-amazon-ecs-using-aws-fargate/creation-status.png" /></p>
+<p>Once complete, click <strong>View service</strong>.</p></li>
+<li><p>Click on the <strong>Tasks</strong> tab to see the tasks running by the service. The task status will transition from <strong>PROVISIONING</strong> to <strong>PENDING</strong> to <strong>RUNNING</strong> as the task is placed within AWS Fargate, the container is pulled and started. Click the refresh button while the task starts.</p>
+<p><img src="images/getting-started-with-amazon-ecs-using-aws-fargate/provisioning.png" /> <img src="images/getting-started-with-amazon-ecs-using-aws-fargate/pending.png" /> <img src="images/getting-started-with-amazon-ecs-using-aws-fargate/running.png" /></p></li>
+<li><p>Once started, click the ID of the task in the <strong>Task</strong> column. This will show you task details including networking configuration:</p>
+<p><img src="images/getting-started-with-amazon-ecs-using-aws-fargate/task-detail.png" /></p>
+<p>Note the <strong>Public IP</strong> of the task.</p></li>
+<li><p>Open a web browser and navigate to the <strong>Public IP</strong> of the task. You’ll see the Hello World splash page:</p>
+<p><img src="images/getting-started-with-amazon-ecs-using-aws-fargate/splash-page.png" /></p></li>
+</ol>
+<h3 id="recap">⭐ Recap</h3>
+<p>🔑  The Fargate launch type allows us to run Docker containers without managing the underlying instances. Amazon ECS is the orchestration system responsible for running our containers using AWS Fargate.</p>
+<p>🛠️  We’ve created a new Amazon ECS cluster and deployed a service for the Hello World application using the Fargate launch type onto that cluster.</p>
+<h3 id="next">Next</h3>
+<p>✅  Proceed to the next module, <a href="create-a-docker-image-repository.html">Create a Docker Image Repository</a>, wherein you’ll create a new Docker image repository in Amazon ECR.</p>
+
+</div>
+<div class='col-3 d-none d-lg-block d-xl-block'>
+<div class='toc'>
+<strong>Contents</strong>
+<ul>
+<li>
+<a href='index.html'>Welcome</a>
+</li>
+<li>
+<a href='setup.html'>Setup</a>
+<ul>
+<li>
+<a href='setup.html#aws-account'>AWS Account</a>
+</li>
+<li>
+<a href='setup.html#region'>Region</a>
+</li>
+<li>
+<a href='setup.html#aws-cloud9-ide'>AWS Cloud9 IDE</a>
+</li>
+</ul>
+</li>
+<li>
+<a href='index.html#sections'>Sections</a>
+<ul>
+<li>
+<a href='index.html#introduction'>Introduction</a>
+<ol>
+<li>
+<a href='getting-started-with-amazon-ecs-using-aws-fargate.html'>Getting Started with Amazon ECS using AWS Fargate</a>
+</li>
+<li>
+<a href='create-a-docker-image-repository.html'>Create a Docker Image Repository</a>
+</li>
+<li>
+<a href='build-and-push-a-docker-image.html'>Build and Push a Docker Image</a>
+</li>
+<li>
+<a href='create-a-service.html'>Create a Service</a>
+</li>
+</ol>
+</li>
+<li>
+<a href='index.html#cicd'>CI/CD</a>
+</li>
+<ol>
+<li>
+<a href='build-a-continuous-deployment-pipeline.html'>Build a Continuous Deployment Pipeline</a>
+</li>
+</ol>
+</ul>
+</li>
+</ul>
+</div>
+
+</div>
+</div>
+</div>
+<textarea id='buffer'></textarea>
+<footer></footer>
+<script crossorigin='anonymous' integrity='sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN' src='https://code.jquery.com/jquery-3.2.1.slim.min.js'></script>
+<script crossorigin='anonymous' integrity='sha384-b/U6ypiBEHpOf/4+1nzFpr53nxSS+GLCkfwBdFNTxtclqqenISfwAzpKaMNFNmj4' src='https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.11.0/umd/popper.min.js'></script>
+<script crossorigin='anonymous' integrity='sha384-h0AbiXch4ZDo7tp9hKZ4TsHbi047NrKGLO3SEJAg45jXxnGIfYzk4Si90RDIqNm1' src='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/js/bootstrap.min.js'></script>
+<script src='js/guide.js'></script>
+</body>
